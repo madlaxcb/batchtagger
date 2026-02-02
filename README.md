@@ -2,6 +2,10 @@
 
 用于批量图片的标签推断工具，基于 WD14 ONNX 模型与 tags.csv，输出与图片同名的 .txt 标签文件。提供图形界面，支持阈值调整、排除标签、递归目录处理与失败处理策略。
 
+<img width="905" height="911" alt="图片" src="https://github.com/user-attachments/assets/8a73f338-ef3e-47dc-aa2d-90fabc1150f2" />
+
+
+
 ## 主要功能
 
 - 批量处理图片（jpg/png/webp/bmp/gif）并生成标签文件
