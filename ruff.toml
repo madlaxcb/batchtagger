@@ -1,0 +1,4 @@
+exclude = ["build", "dist", "python_env", "comfyui-WD14-Tagger", "__pycache__"]
+
+[lint]
+per-file-ignores = { "batch_tagger.py" = ["E402"] }
