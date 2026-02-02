@@ -63,3 +63,67 @@ pyinstaller BatchTagger.spec
 - batch_tagger.py：主程序
 - BatchTagger.spec：PyInstaller 打包配置
 - comfyui-WD14-Tagger/：ComfyUI WD14 Tagger 依赖资源
+
+---
+
+# Batch Tagger
+
+Batch image tag inference tool based on the WD14 ONNX model and tags.csv. Produces a .txt file with the same basename as each image. Includes a GUI with threshold tuning, exclude-tag support, recursive processing, and failure handling.
+
+## Features
+
+- Batch process images (jpg/png/webp/bmp/gif) and generate tag files
+- Adjustable general/character thresholds with rating and character tags
+- Underscore-to-space replacement and exclude tag list
+- Recursive subfolder processing and skip failed/existing outputs
+- Auto-save settings to settings.json
+
+## Requirements
+
+- Windows
+- Python 3.10+ (for source run)
+- Dependencies: PyQt6, onnxruntime, Pillow, numpy
+- Model & tags: WD14 onnx model and tags.csv
+
+## Usage
+
+1. Run:
+
+   ```bash
+   python batch_tagger.py
+   ```
+
+2. Fill in:
+   - Input folder
+   - Output folder (empty = input folder)
+   - Model (onnx) path
+   - Tags (tags.csv) path
+   - Optional ComfyUI directory
+
+3. Set parameters and click “Start”.
+
+## Output
+
+- Writes a .txt file per image with inferred tags
+- Output directory is created automatically when missing
+
+## Config & Logs
+
+- settings.json: saved UI inputs and parameters
+- startup_error.log: startup errors
+- diagnostics.json: diagnostics info
+- debug.log: debug log
+
+## Packaging
+
+Use the PyInstaller spec:
+
+```bash
+pyinstaller BatchTagger.spec
+```
+
+## Structure
+
+- batch_tagger.py: main app
+- BatchTagger.spec: PyInstaller config
+- comfyui-WD14-Tagger/: ComfyUI WD14 Tagger resources
