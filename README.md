@@ -4,6 +4,7 @@
 
 <img width="905" height="911" alt="图片" src="https://github.com/user-attachments/assets/8a73f338-ef3e-47dc-aa2d-90fabc1150f2" />
 
+<img width="2467" height="908" alt="图片" src="https://github.com/user-attachments/assets/cbfc7827-da1a-42a0-8a9d-6e0f9a5eb328" />
 
 
 ## 主要功能
@@ -67,6 +68,10 @@ pyinstaller BatchTagger.spec
 - comfyui-WD14-Tagger/：ComfyUI WD14 Tagger 依赖资源
 
 ---
+
+
+
+
 
 # Batch Tagger
 
