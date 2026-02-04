@@ -9,6 +9,8 @@
 ## 主要功能
 
 - 批量处理图片（jpg/png/webp/bmp/gif）并生成标签文件
+- 支持 GPU 加速（CUDA/DirectML）与文件夹拖拽输入
+- 实时显示处理速度与剩余时间（ETA）
 - 通用/角色阈值可调，支持评分与角色标签输出
 - 支持下划线替换为空格、排除标签列表（支持按添加顺序/名称排序）
 - 支持递归子目录、跳过失败或已存在输出
@@ -73,6 +75,8 @@ Batch image tag inference tool based on the WD14 ONNX model and tags.csv. Produc
 ## Features
 
 - Batch process images (jpg/png/webp/bmp/gif) and generate tag files
+- GPU acceleration support (CUDA/DirectML) and Drag & Drop input
+- Real-time processing speed and ETA display
 - Adjustable general/character thresholds with rating and character tags
 - Underscore-to-space replacement and exclude tag list (supports sorting by order/name)
 - Recursive subfolder processing and skip failed/existing outputs

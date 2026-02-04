@@ -110,6 +110,7 @@ DEFAULT_SETTINGS = {
     "skip_failed": True,
     "skip_existing": False,
     "debug": False,
+    "provider": "CPU",
 }
 
 
@@ -393,7 +394,7 @@ def preprocess_image(image_path, size, layout):
     return arr
 
 
-def load_model(model_path):
+def load_model(model_path, provider="CPU"):
     os.environ.setdefault("ORT_LOGGING_LEVEL", "4")
     try:
         import onnxruntime as ort
@@ -403,8 +404,25 @@ def load_model(model_path):
             raise RuntimeError(f"ONNXRuntime依赖缺失: {', '.join(missing)}") from exc
         raise
 
-    providers = ["CPUExecutionProvider"]
-    session = ort.InferenceSession(model_path, providers=providers)
+    providers = []
+    if provider == "CUDA":
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    elif provider == "DirectML":
+        providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
+    elif provider == "CoreML":
+        providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    else:
+        providers = ["CPUExecutionProvider"]
+
+    try:
+        session = ort.InferenceSession(model_path, providers=providers)
+    except Exception as e:
+        if provider != "CPU":
+             print(json.dumps({"type": "log", "message": f"{provider}加载失败，尝试回退到CPU: {e}"}, ensure_ascii=False), flush=True)
+             session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        else:
+             raise e
+
     input_shape = session.get_inputs()[0].shape
     size = 448
     layout = "NCHW"
@@ -503,6 +521,7 @@ DEFAULT_SETTINGS = {
     "skip_failed": True,
     "skip_existing": False,
     "debug": False,
+    "provider": "CPU",
 }
 
 def find_images(root_dir, recursive):
@@ -568,11 +587,29 @@ def preprocess_image(image_path, size, layout):
         arr = arr[None, ...]
     return arr
 
-def load_model(model_path):
+def load_model(model_path, provider="CPU"):
     os.environ.setdefault("ORT_LOGGING_LEVEL", "4")
     import onnxruntime as ort
 
-    session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+    providers = []
+    if provider == "CUDA":
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    elif provider == "DirectML":
+        providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
+    elif provider == "CoreML":
+        providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    else:
+        providers = ["CPUExecutionProvider"]
+
+    try:
+        session = ort.InferenceSession(model_path, providers=providers)
+    except Exception as e:
+        if provider != "CPU":
+             print(json.dumps({"type": "log", "message": f"{provider}加载失败，尝试回退到CPU: {e}"}, ensure_ascii=False), flush=True)
+             session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        else:
+             raise e
+
     input_shape = session.get_inputs()[0].shape
     size = 448
     layout = "NCHW"
@@ -642,6 +679,7 @@ def run_worker(config_path):
     output_dir = settings["output_dir"] or input_dir
     model_path = settings["model_path"]
     tags_path = settings["tags_path"]
+    provider = settings.get("provider", "CPU")
 
     ensure_dir(output_dir)
     images = find_images(input_dir, settings["recursive"])
@@ -650,8 +688,8 @@ def run_worker(config_path):
         return
 
     print(json.dumps({"type": "log", "message": f"待处理图片: {len(images)}"}, ensure_ascii=False), flush=True)
-    print(json.dumps({"type": "log", "message": f"加载模型: {model_path}"}, ensure_ascii=False), flush=True)
-    session, size, layout = load_model(model_path)
+    print(json.dumps({"type": "log", "message": f"加载模型: {model_path} ({provider})"}, ensure_ascii=False), flush=True)
+    session, size, layout = load_model(model_path, provider)
     names, general_index, character_index = read_tags_csv(tags_path)
     input_name = session.get_inputs()[0].name
     exclude_set = parse_exclude_tags(settings["exclude_tags"])
@@ -673,6 +711,8 @@ def run_worker(config_path):
     total = len(images)
     skip_failed = settings["skip_failed"]
     skip_existing = settings["skip_existing"]
+    start_time = time.time()
+    
     for idx, image_path in enumerate(images, start=1):
         base = os.path.splitext(os.path.basename(image_path))[0]
         out_path = os.path.join(output_dir, f"{base}.txt")
@@ -680,7 +720,13 @@ def run_worker(config_path):
             print(json.dumps({"type": "log", "message": f"跳过已存在({idx}/{total}): {os.path.basename(image_path)}"}, ensure_ascii=False), flush=True)
             print(json.dumps({"type": "progress", "current": idx, "total": total}, ensure_ascii=False), flush=True)
             continue
-        print(json.dumps({"type": "log", "message": f"处理中({idx}/{total}): {os.path.basename(image_path)}"}, ensure_ascii=False), flush=True)
+        elapsed = time.time() - start_time
+        avg_time = elapsed / idx if idx > 0 else 0
+        remaining = avg_time * (total - idx)
+        eta_str = time.strftime("%H:%M:%S", time.gmtime(remaining))
+        speed = 1 / avg_time if avg_time > 0 else 0
+        
+        print(json.dumps({"type": "log", "message": f"处理中({idx}/{total}) [{speed:.1f}it/s ETA: {eta_str}]: {os.path.basename(image_path)}"}, ensure_ascii=False), flush=True)
         try:
             arr = preprocess_image(image_path, size, layout)
             outputs = session.run(None, {input_name: arr})
@@ -755,15 +801,16 @@ class TaggerWorker(QObject):
                 self.failed.emit("本机CPU不支持AVX2，无法在本地加载ONNXRuntime")
                 return
 
-            self.log.emit(f"加载模型: {model_path}")
-            session, size, layout = load_model(model_path)
+            provider = self.settings.get("provider", "CPU")
+            self.log.emit(f"加载模型: {model_path} ({provider})")
+            session, size, layout = load_model(model_path, provider)
             names, general_index, character_index = read_tags_csv(tags_path)
             input_name = session.get_inputs()[0].name
             exclude_set = parse_exclude_tags(self.settings["exclude_tags"])
             self.log.emit(
                 f"模型输入: {session.get_inputs()[0].shape} 布局: {layout} 尺寸: {size}"
             )
-            self.log.emit("执行器: CPUExecutionProvider")
+            self.log.emit(f"执行器: {session.get_providers()[0]}")
             self.log.emit(f"标签数量: {len(names)}")
             self.log.emit(
                 "设置: "
@@ -783,6 +830,8 @@ class TaggerWorker(QObject):
             self.log.emit(f"待处理图片: {total}")
             skip_failed = self.settings["skip_failed"]
             skip_existing = self.settings["skip_existing"]
+            start_time = time.time()
+            
             for idx, image_path in enumerate(images, start=1):
                 if self._stopped:
                     self.log.emit("已停止")
@@ -795,7 +844,14 @@ class TaggerWorker(QObject):
                     )
                     self.progress.emit(idx, total)
                     continue
-                self.log.emit(f"处理中({idx}/{total}): {os.path.basename(image_path)}")
+                
+                elapsed = time.time() - start_time
+                avg_time = elapsed / idx if idx > 0 else 0
+                remaining = avg_time * (total - idx)
+                eta_str = time.strftime("%H:%M:%S", time.gmtime(remaining))
+                speed = 1 / avg_time if avg_time > 0 else 0
+                
+                self.log.emit(f"处理中({idx}/{total}) [{speed:.1f}it/s ETA: {eta_str}]: {os.path.basename(image_path)}")
                 try:
                     arr = preprocess_image(image_path, size, layout)
                     outputs = session.run(None, {input_name: arr})
@@ -856,8 +912,32 @@ class MainWindow(QWidget):
         self._save_timer = QTimer(self)
         self._save_timer.setSingleShot(True)
         self._save_timer.timeout.connect(self._auto_save_settings)
+        self.setAcceptDrops(True)
         self._build_ui()
         self._apply_settings()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        
+        path = urls[0].toLocalFile()
+        if os.path.isdir(path):
+            self.input_dir.setText(path)
+            # If output is empty, maybe set it? Default logic handles empty output anyway.
+        elif os.path.isfile(path):
+             # Maybe it's a model or tags file?
+             ext = os.path.splitext(path)[1].lower()
+             if ext == ".onnx":
+                 self.model_path.setText(path)
+             elif ext == ".csv":
+                 self.tags_path.setText(path)
 
     def _build_ui(self):
         layout = QVBoxLayout()
@@ -896,6 +976,10 @@ class MainWindow(QWidget):
         self.model_path.textChanged.connect(self._schedule_save)
         self.tags_path.textChanged.connect(self._schedule_save)
         self.comfyui_dir.textChanged.connect(self._schedule_save)
+        
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItems(["CPU", "CUDA", "DirectML", "CoreML"])
+        self.provider_combo.currentIndexChanged.connect(self._schedule_save)
 
         row_input = QHBoxLayout()
         row_input.addWidget(self.input_dir)
@@ -919,6 +1003,7 @@ class MainWindow(QWidget):
         label_tags = QLabel("标签(tags.csv)")
         label_comfy = QLabel("ComfyUI目录")
         label_comfy_env = QLabel("ComfyUI环境")
+        label_provider = QLabel("执行器")
         self._set_tooltip(label_input, "说明：待处理图片所在文件夹\n示例：D:\\images")
         self._set_tooltip(
             label_output,
@@ -937,12 +1022,16 @@ class MainWindow(QWidget):
             label_comfy_env,
             "说明：识别到的ComfyUI环境python.exe\n示例：D:\\ComfyUI\\python\\python.exe",
         )
+        self._set_tooltip(
+            label_provider, "说明：选择ONNX推理后端\n注意：CUDA/DirectML需要对应环境支持",
+        )
         path_form.addRow(label_input, self._wrap(row_input))
         path_form.addRow(label_output, self._wrap(row_output))
         path_form.addRow(label_model, self._wrap(row_model))
         path_form.addRow(label_tags, self._wrap(row_tags))
         path_form.addRow(label_comfy, self._wrap(row_comfy))
         path_form.addRow(label_comfy_env, self.comfy_status)
+        path_form.addRow(label_provider, self.provider_combo)
         path_group.setLayout(path_form)
 
         opt_group = QGroupBox("参数")
@@ -1343,6 +1432,7 @@ class MainWindow(QWidget):
         self.model_path.setText(self.settings["model_path"])
         self.tags_path.setText(self.settings["tags_path"])
         self.comfyui_dir.setText(self.settings["comfyui_dir"])
+        self.provider_combo.setCurrentText(self.settings.get("provider", "CPU"))
         self.general_th.setValue(self.settings["general_threshold"])
         self.character_th.setValue(self.settings["character_threshold"])
         self._set_exclude_tags_items(
@@ -1377,6 +1467,7 @@ class MainWindow(QWidget):
             "skip_existing": self.skip_existing.isChecked(),
             "debug": self.debug_mode.isChecked(),
             "comfyui_dir": self.comfyui_dir.text().strip(),
+            "provider": self.provider_combo.currentText(),
         }
         save_settings(self.settings)
 
@@ -1632,6 +1723,7 @@ def run_worker(config_path):
     output_dir = settings["output_dir"] or input_dir
     model_path = settings["model_path"]
     tags_path = settings["tags_path"]
+    provider = settings.get("provider", "CPU")
 
     ensure_dir(output_dir)
     images = find_images(input_dir, settings["recursive"])
@@ -1659,11 +1751,11 @@ def run_worker(config_path):
 
     print(
         json.dumps(
-            {"type": "log", "message": f"加载模型: {model_path}"}, ensure_ascii=False
+            {"type": "log", "message": f"加载模型: {model_path} ({provider})"}, ensure_ascii=False
         ),
         flush=True,
     )
-    session, size, layout = load_model(model_path)
+    session, size, layout = load_model(model_path, provider)
     names, general_index, character_index = read_tags_csv(tags_path)
     input_name = session.get_inputs()[0].name
     exclude_set = parse_exclude_tags(settings["exclude_tags"])
