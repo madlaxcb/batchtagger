@@ -84,6 +84,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QStackedLayout,
     QScrollArea,
+    QComboBox,
 )
 
 
@@ -962,6 +963,20 @@ class MainWindow(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         self.exclude_tag_list_label = QLabel("排除标签列表")
+        self.exclude_tag_sort_combo = QComboBox()
+        self.exclude_tag_sort_combo.addItems(
+            [
+                "按添加顺序 (新->旧)",
+                "按添加顺序 (旧->新)",
+                "按名称 (A->Z)",
+                "按名称 (Z->A)",
+            ]
+        )
+        self.exclude_tag_sort_combo.setCurrentIndex(0)
+        self.exclude_tag_sort_combo.currentIndexChanged.connect(
+            self._render_exclude_tag_list
+        )
+
         self.exclude_tag_list_container = QWidget()
         self.exclude_tag_list_layout = FlowLayout()
         self.exclude_tag_list_container.setLayout(self.exclude_tag_list_layout)
@@ -1007,7 +1022,14 @@ class MainWindow(QWidget):
         opt_form.addRow(label_general, self.general_th)
         opt_form.addRow(label_character, self.character_th)
         opt_form.addRow(label_exclude, self.exclude_tags)
-        opt_form.addRow(self.exclude_tag_list_label, self.exclude_tag_list_scroll)
+        
+        row_exclude_header = QHBoxLayout()
+        row_exclude_header.addWidget(self.exclude_tag_list_label)
+        row_exclude_header.addStretch()
+        row_exclude_header.addWidget(self.exclude_tag_sort_combo)
+        
+        opt_form.addRow(row_exclude_header)
+        opt_form.addRow(self.exclude_tag_list_scroll)
         opt_form.addRow(self.include_rating)
         opt_form.addRow(self.include_character)
         opt_form.addRow(self.replace_underscore)
@@ -1250,7 +1272,20 @@ class MainWindow(QWidget):
 
     def _render_exclude_tag_list(self):
         self._clear_exclude_tag_list()
-        for tag in self.exclude_tags_items:
+        
+        sort_mode = self.exclude_tag_sort_combo.currentIndex()
+        display_items = list(self.exclude_tags_items)
+        
+        if sort_mode == 0:  # Added Order (New->Old)
+            display_items.reverse()
+        elif sort_mode == 1:  # Added Order (Old->New)
+            pass
+        elif sort_mode == 2:  # Name (A->Z)
+            display_items.sort(key=lambda x: x.lower())
+        elif sort_mode == 3:  # Name (Z->A)
+            display_items.sort(key=lambda x: x.lower(), reverse=True)
+            
+        for tag in display_items:
             self.exclude_tag_list_layout.addWidget(self._create_exclude_tag_chip(tag))
         self.exclude_tag_list_layout.invalidate()
         self.exclude_tag_list_container.updateGeometry()
@@ -1259,18 +1294,22 @@ class MainWindow(QWidget):
         QTimer.singleShot(0, self._update_exclude_tag_list_height)
 
     def _set_exclude_tags_items(self, tags):
-        self.exclude_tags_items = sorted(tags, key=lambda x: x.lower())
+        self.exclude_tags_items = list(tags)
         self._render_exclude_tag_list()
         self._schedule_save()
 
     def _add_exclude_tags(self, tags):
         if not tags:
             return
-        current = {t.lower(): t for t in self.exclude_tags_items}
+        
+        existing = {t.lower() for t in self.exclude_tags_items}
+        new_items = []
         for tag in tags:
-            current[tag.lower()] = tag
-
-        self.exclude_tags_items = sorted(current.values(), key=lambda x: x.lower())
+            if tag.lower() not in existing:
+                new_items.append(tag)
+                existing.add(tag.lower())
+        
+        self.exclude_tags_items.extend(new_items)
         self._render_exclude_tag_list()
         self._schedule_save()
 

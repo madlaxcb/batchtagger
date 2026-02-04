@@ -10,7 +10,7 @@
 
 - 批量处理图片（jpg/png/webp/bmp/gif）并生成标签文件
 - 通用/角色阈值可调，支持评分与角色标签输出
-- 支持下划线替换为空格、排除标签列表
+- 支持下划线替换为空格、排除标签列表（支持按添加顺序/名称排序）
 - 支持递归子目录、跳过失败或已存在输出
 - 自动保存设置到 settings.json
 
@@ -74,7 +74,7 @@ Batch image tag inference tool based on the WD14 ONNX model and tags.csv. Produc
 
 - Batch process images (jpg/png/webp/bmp/gif) and generate tag files
 - Adjustable general/character thresholds with rating and character tags
-- Underscore-to-space replacement and exclude tag list
+- Underscore-to-space replacement and exclude tag list (supports sorting by order/name)
 - Recursive subfolder processing and skip failed/existing outputs
 - Auto-save settings to settings.json
 
