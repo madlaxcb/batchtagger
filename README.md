@@ -69,70 +69,86 @@ pyinstaller BatchTagger.spec
 
 ---
 
+# BatchTagger
 
-
-
-
-# Batch Tagger
-
-Batch image tag inference tool based on the WD14 ONNX model and tags.csv. Produces a .txt file with the same basename as each image. Includes a GUI with threshold tuning, exclude-tag support, recursive processing, and failure handling.
+BatchTagger is a powerful GUI application for batch tagging images using ONNX Runtime and WD14 Tagger models. It allows users to efficiently tag large collections of images with high accuracy and customizable settings.
 
 ## Features
 
-- Batch process images (jpg/png/webp/bmp/gif) and generate tag files
-- GPU acceleration support (CUDA/DirectML) and Drag & Drop input
-- Real-time processing speed and ETA display
-- Adjustable general/character thresholds with rating and character tags
-- Underscore-to-space replacement and exclude tag list (supports sorting by order/name)
-- Recursive subfolder processing and skip failed/existing outputs
-- Auto-save settings to settings.json
+- **Batch Processing**: Tag multiple images in a directory recursively.
+- **High Performance**: Optimized startup and processing speed using ONNX Runtime.
+- **Smart Filtering**: Real-time validation for exclude tags to prevent duplicates.
+- **User-Friendly Interface**: Easy-to-use GUI for setting thresholds, excluded tags, and model selection.
+- **Responsive Layout**: Modern grid layout for settings to maximize screen real estate.
+- **Cross-Platform**: Built with Python and Qt (PyQt6), compatible with Windows, Linux, and macOS.
 
-## Requirements
+## Installation
 
-- Windows
-- Python 3.10+ (for source run)
-- Dependencies: PyQt6, onnxruntime, Pillow, numpy
-- Model & tags: WD14 onnx model and tags.csv
+### Prerequisites
+
+- Python 3.10 or higher
+- Git
+
+### Steps
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/madlaxcb/batchtagger.git
+   cd batchtagger
+   ```
+
+2. Create a virtual environment (optional but recommended):
+   ```bash
+   python -m venv venv
+   # Windows
+   venv\Scripts\activate
+   # Linux/macOS
+   source venv/bin/activate
+   ```
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   *Note: Ensure you have a compatible ONNX Runtime installed for your hardware (CPU/GPU).*
 
 ## Usage
 
-1. Run:
-
-   ```bash
-   python batch_tagger.py
-   ```
-
-2. Fill in:
-   - Input folder
-   - Output folder (empty = input folder)
-   - Model (onnx) path
-   - Tags (tags.csv) path
-   - Optional ComfyUI directory
-
-3. Set parameters and click “Start”.
-
-## Output
-
-- Writes a .txt file per image with inferred tags
-- Output directory is created automatically when missing
-
-## Config & Logs
-
-- settings.json: saved UI inputs and parameters
-- startup_error.log: startup errors
-- diagnostics.json: diagnostics info
-- debug.log: debug log
-
-## Packaging
-
-Use the PyInstaller spec:
+### Running from Source
 
 ```bash
-pyinstaller BatchTagger.spec
+python batch_tagger.py
 ```
 
-## Structure
+### Using the Executable
 
-- batch_tagger.py: main app
-- BatchTagger.spec: PyInstaller config
-- comfyui-WD14-Tagger/: ComfyUI WD14 Tagger resources
+Download the latest release from the [Releases](https://github.com/madlaxcb/batchtagger/releases) page. Extract the archive and run `BatchTagger.exe`.
+
+1. **Select Directory**: Choose the folder containing your images.
+2. **Configure Settings**: Adjust thresholds for general and character tags.
+3. **Exclude Tags**: Add any tags you want to exclude from the output.
+4. **Start Tagging**: Click the "Start" button to begin processing.
+
+## Building from Source
+
+To build a standalone executable using PyInstaller:
+
+1. Install development dependencies:
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. Run the build command:
+   ```bash
+   pyinstaller BatchTagger.spec
+   ```
+
+The executable will be located in the `dist/BatchTagger/` directory.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+[MIT License](LICENSE)
