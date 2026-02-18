@@ -81,14 +81,19 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QFormLayout,
     QLayout,
+    QGridLayout,
     QSizePolicy,
     QStackedLayout,
     QScrollArea,
     QComboBox,
+    QInputDialog,
+    QMessageBox,
+    QMenu,
 )
 
 
 SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
+EXCLUDE_CONFIG_PATH = os.path.join(APP_DIR, "exclude_tags.json")
 CRASH_LOG_PATH = os.path.join(APP_DIR, "startup_error.log")
 DIAG_LOG_PATH = os.path.join(APP_DIR, "diagnostics.json")
 DEBUG_LOG_PATH = os.path.join(APP_DIR, "debug.log")
@@ -110,7 +115,6 @@ DEFAULT_SETTINGS = {
     "skip_failed": True,
     "skip_existing": False,
     "debug": False,
-    "provider": "CPU",
 }
 
 
@@ -204,6 +208,71 @@ def save_settings(data):
     payload.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def load_exclude_config(settings=None):
+    """
+    Load exclude tags configuration.
+    Structure:
+    {
+        "current_list": "default",
+        "lists": {
+            "default": ["tag1", "tag2"],
+            "custom": ["tag3"]
+        }
+    }
+    """
+    default_config = {
+        "current_list": "default",
+        "lists": {
+            "default": []
+        }
+    }
+    
+    # Migration from settings.json if exclude_tags.json doesn't exist
+    if not os.path.isfile(EXCLUDE_CONFIG_PATH):
+        if settings and "exclude_tags" in settings and settings["exclude_tags"]:
+            # Parse existing string to list
+            existing_tags = []
+            raw = settings["exclude_tags"]
+            for item in raw.replace("，", ",").replace("\\n", ",").replace("\n", ",").split(","):
+                val = item.strip()
+                if val:
+                    existing_tags.append(val)
+            default_config["lists"]["default"] = existing_tags
+        
+        try:
+            with open(EXCLUDE_CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(default_config, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+        return default_config
+
+    try:
+        with open(EXCLUDE_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # Validate structure
+        if "lists" not in data or not isinstance(data["lists"], dict):
+            data["lists"] = default_config["lists"]
+        if "current_list" not in data or data["current_list"] not in data["lists"]:
+            if data["lists"]:
+                data["current_list"] = next(iter(data["lists"]))
+            else:
+                data["lists"] = {"default": []}
+                data["current_list"] = "default"
+        
+        return data
+    except Exception:
+        return default_config
+
+
+def save_exclude_config(data):
+    try:
+        with open(EXCLUDE_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 def find_images(root_dir, recursive):
@@ -394,7 +463,7 @@ def preprocess_image(image_path, size, layout):
     return arr
 
 
-def load_model(model_path, provider="CPU"):
+def load_model(model_path):
     os.environ.setdefault("ORT_LOGGING_LEVEL", "4")
     try:
         import onnxruntime as ort
@@ -404,25 +473,8 @@ def load_model(model_path, provider="CPU"):
             raise RuntimeError(f"ONNXRuntime依赖缺失: {', '.join(missing)}") from exc
         raise
 
-    providers = []
-    if provider == "CUDA":
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    elif provider == "DirectML":
-        providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
-    elif provider == "CoreML":
-        providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-    else:
-        providers = ["CPUExecutionProvider"]
-
-    try:
-        session = ort.InferenceSession(model_path, providers=providers)
-    except Exception as e:
-        if provider != "CPU":
-             print(json.dumps({"type": "log", "message": f"{provider}加载失败，尝试回退到CPU: {e}"}, ensure_ascii=False), flush=True)
-             session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
-        else:
-             raise e
-
+    providers = ["CPUExecutionProvider"]
+    session = ort.InferenceSession(model_path, providers=providers)
     input_shape = session.get_inputs()[0].shape
     size = 448
     layout = "NCHW"
@@ -504,6 +556,7 @@ def build_worker_script():
 import os
 import sys
 import csv
+import time
 
 DEFAULT_SETTINGS = {
     "input_dir": "",
@@ -521,7 +574,6 @@ DEFAULT_SETTINGS = {
     "skip_failed": True,
     "skip_existing": False,
     "debug": False,
-    "provider": "CPU",
 }
 
 def find_images(root_dir, recursive):
@@ -587,29 +639,11 @@ def preprocess_image(image_path, size, layout):
         arr = arr[None, ...]
     return arr
 
-def load_model(model_path, provider="CPU"):
+def load_model(model_path):
     os.environ.setdefault("ORT_LOGGING_LEVEL", "4")
     import onnxruntime as ort
 
-    providers = []
-    if provider == "CUDA":
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    elif provider == "DirectML":
-        providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
-    elif provider == "CoreML":
-        providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-    else:
-        providers = ["CPUExecutionProvider"]
-
-    try:
-        session = ort.InferenceSession(model_path, providers=providers)
-    except Exception as e:
-        if provider != "CPU":
-             print(json.dumps({"type": "log", "message": f"{provider}加载失败，尝试回退到CPU: {e}"}, ensure_ascii=False), flush=True)
-             session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
-        else:
-             raise e
-
+    session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
     input_shape = session.get_inputs()[0].shape
     size = 448
     layout = "NCHW"
@@ -679,17 +713,20 @@ def run_worker(config_path):
     output_dir = settings["output_dir"] or input_dir
     model_path = settings["model_path"]
     tags_path = settings["tags_path"]
-    provider = settings.get("provider", "CPU")
 
     ensure_dir(output_dir)
-    images = find_images(input_dir, settings["recursive"])
+    if settings.get("specific_files"):
+        images = settings["specific_files"]
+    else:
+        images = find_images(input_dir, settings["recursive"])
+    
     if not images:
         print(json.dumps({"type": "log", "message": "未找到可处理的图片"}, ensure_ascii=False), flush=True)
         return
 
     print(json.dumps({"type": "log", "message": f"待处理图片: {len(images)}"}, ensure_ascii=False), flush=True)
-    print(json.dumps({"type": "log", "message": f"加载模型: {model_path} ({provider})"}, ensure_ascii=False), flush=True)
-    session, size, layout = load_model(model_path, provider)
+    print(json.dumps({"type": "log", "message": f"加载模型: {model_path}"}, ensure_ascii=False), flush=True)
+    session, size, layout = load_model(model_path)
     names, general_index, character_index = read_tags_csv(tags_path)
     input_name = session.get_inputs()[0].name
     exclude_set = parse_exclude_tags(settings["exclude_tags"])
@@ -801,9 +838,8 @@ class TaggerWorker(QObject):
                 self.failed.emit("本机CPU不支持AVX2，无法在本地加载ONNXRuntime")
                 return
 
-            provider = self.settings.get("provider", "CPU")
-            self.log.emit(f"加载模型: {model_path} ({provider})")
-            session, size, layout = load_model(model_path, provider)
+            self.log.emit(f"加载模型: {model_path}")
+            session, size, layout = load_model(model_path)
             names, general_index, character_index = read_tags_csv(tags_path)
             input_name = session.get_inputs()[0].name
             exclude_set = parse_exclude_tags(self.settings["exclude_tags"])
@@ -902,6 +938,7 @@ class MainWindow(QWidget):
         super().__init__()
         self.setWindowTitle("批量反推提示词")
         self.settings = load_settings()
+        self.exclude_config = load_exclude_config(self.settings)
         self.debug_log_path = DEBUG_LOG_PATH
         self.worker_thread = None
         self.worker = None
@@ -909,12 +946,13 @@ class MainWindow(QWidget):
         self.exclude_tags = None
         self.exclude_tags_items = []
         self._suppress_settings_save = False
+        self._pending_dropped_files = None
         self._save_timer = QTimer(self)
         self._save_timer.setSingleShot(True)
         self._save_timer.timeout.connect(self._auto_save_settings)
         self.setAcceptDrops(True)
         self._build_ui()
-        self._apply_settings()
+        self._apply_settings(validate=False)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -927,17 +965,52 @@ class MainWindow(QWidget):
         if not urls:
             return
         
-        path = urls[0].toLocalFile()
-        if os.path.isdir(path):
-            self.input_dir.setText(path)
-            # If output is empty, maybe set it? Default logic handles empty output anyway.
-        elif os.path.isfile(path):
-             # Maybe it's a model or tags file?
-             ext = os.path.splitext(path)[1].lower()
-             if ext == ".onnx":
-                 self.model_path.setText(path)
-             elif ext == ".csv":
-                 self.tags_path.setText(path)
+        image_exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+        dropped_images = []
+        
+        # Check first item to determine mode
+        first_path = urls[0].toLocalFile()
+        
+        if os.path.isdir(first_path):
+            self.input_dir.setText(first_path)
+            self.output_dir.setText(first_path)
+        elif os.path.isfile(first_path):
+            ext = os.path.splitext(first_path)[1].lower()
+            if ext == ".onnx":
+                self.model_path.setText(first_path)
+                return
+            elif ext == ".csv":
+                self.tags_path.setText(first_path)
+                return
+            
+            # Collect all dropped images
+            for url in urls:
+                p = url.toLocalFile()
+                if os.path.isfile(p) and os.path.splitext(p)[1].lower() in image_exts:
+                    dropped_images.append(p)
+            
+            if dropped_images:
+                # Use directory of the first image
+                base_dir = os.path.dirname(dropped_images[0])
+                
+                # Handle Input Dir - allow update and save
+                self.input_dir.setText(base_dir)
+                
+                # Handle Output Dir - update for execution but do not save to file
+                orig_output = self.output_dir.text()
+                self._suppress_settings_save = True
+                try:
+                    self.output_dir.setText(base_dir)
+                    self._pending_dropped_files = dropped_images
+                    # Force collect settings to update memory, but skip file save
+                    self._start(save_settings=False)
+                finally:
+                    # Restore UI and flag
+                    self.output_dir.setText(orig_output)
+                    self._suppress_settings_save = False
+                    
+                    # Manually sync self.settings back to UI state to be safe
+                    self.settings["output_dir"] = orig_output
 
     def _build_ui(self):
         layout = QVBoxLayout()
@@ -977,10 +1050,6 @@ class MainWindow(QWidget):
         self.tags_path.textChanged.connect(self._schedule_save)
         self.comfyui_dir.textChanged.connect(self._schedule_save)
         
-        self.provider_combo = QComboBox()
-        self.provider_combo.addItems(["CPU", "CUDA", "DirectML", "CoreML"])
-        self.provider_combo.currentIndexChanged.connect(self._schedule_save)
-
         row_input = QHBoxLayout()
         row_input.addWidget(self.input_dir)
         row_input.addWidget(btn_input)
@@ -1003,7 +1072,6 @@ class MainWindow(QWidget):
         label_tags = QLabel("标签(tags.csv)")
         label_comfy = QLabel("ComfyUI目录")
         label_comfy_env = QLabel("ComfyUI环境")
-        label_provider = QLabel("执行器")
         self._set_tooltip(label_input, "说明：待处理图片所在文件夹\n示例：D:\\images")
         self._set_tooltip(
             label_output,
@@ -1022,16 +1090,12 @@ class MainWindow(QWidget):
             label_comfy_env,
             "说明：识别到的ComfyUI环境python.exe\n示例：D:\\ComfyUI\\python\\python.exe",
         )
-        self._set_tooltip(
-            label_provider, "说明：选择ONNX推理后端\n注意：CUDA/DirectML需要对应环境支持",
-        )
         path_form.addRow(label_input, self._wrap(row_input))
         path_form.addRow(label_output, self._wrap(row_output))
         path_form.addRow(label_model, self._wrap(row_model))
         path_form.addRow(label_tags, self._wrap(row_tags))
         path_form.addRow(label_comfy, self._wrap(row_comfy))
         path_form.addRow(label_comfy_env, self.comfy_status)
-        path_form.addRow(label_provider, self.provider_combo)
         path_group.setLayout(path_form)
 
         opt_group = QGroupBox("参数")
@@ -1047,6 +1111,35 @@ class MainWindow(QWidget):
         self.character_th.setSingleStep(0.01)
         self.general_th.valueChanged.connect(self._schedule_save)
         self.character_th.valueChanged.connect(self._schedule_save)
+        
+        # Exclude List Management UI
+        self.exclude_list_combo = QComboBox()
+        self.exclude_list_combo.setSizePolicy(
+            QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed
+        )
+        self.exclude_list_combo.currentIndexChanged.connect(self._on_exclude_list_changed)
+        
+        btn_new_list = QPushButton("新建")
+        btn_copy_list = QPushButton("复制")
+        btn_ren_list = QPushButton("重名")
+        btn_del_list = QPushButton("删除")
+        
+        btn_new_list.setFixedWidth(40)
+        btn_copy_list.setFixedWidth(40)
+        btn_ren_list.setFixedWidth(40)
+        btn_del_list.setFixedWidth(40)
+        
+        btn_new_list.clicked.connect(self._new_exclude_list)
+        btn_copy_list.clicked.connect(self._copy_exclude_list)
+        btn_ren_list.clicked.connect(self._rename_exclude_list)
+        btn_del_list.clicked.connect(self._delete_exclude_list)
+
+        self._set_tooltip(self.exclude_list_combo, "说明：选择当前的排除标签配置列表\n示例：Default")
+        self._set_tooltip(btn_new_list, "说明：新建一个空的排除列表\n示例：点击创建新配置")
+        self._set_tooltip(btn_copy_list, "说明：复制当前排除列表为新列表\n示例：基于当前配置微调")
+        self._set_tooltip(btn_ren_list, "说明：重命名当前排除列表\n示例：修改配置名称")
+        self._set_tooltip(btn_del_list, "说明：删除当前排除列表\n示例：至少保留一个配置")
+        
         self.exclude_tags = QLineEdit()
         self.exclude_tags.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
@@ -1065,6 +1158,7 @@ class MainWindow(QWidget):
         self.exclude_tag_sort_combo.currentIndexChanged.connect(
             self._render_exclude_tag_list
         )
+        self._set_tooltip(self.exclude_tag_sort_combo, "说明：设置下方标签的显示排序方式\n示例：按名称排序方便查找")
 
         self.exclude_tag_list_container = QWidget()
         self.exclude_tag_list_layout = FlowLayout()
@@ -1114,18 +1208,36 @@ class MainWindow(QWidget):
         
         row_exclude_header = QHBoxLayout()
         row_exclude_header.addWidget(self.exclude_tag_list_label)
+        row_exclude_header.addSpacing(10)
+        row_exclude_header.addWidget(self.exclude_list_combo)
+        row_exclude_header.addWidget(btn_new_list)
+        row_exclude_header.addWidget(btn_copy_list)
+        row_exclude_header.addWidget(btn_ren_list)
+        row_exclude_header.addWidget(btn_del_list)
         row_exclude_header.addStretch()
         row_exclude_header.addWidget(self.exclude_tag_sort_combo)
         
         opt_form.addRow(row_exclude_header)
         opt_form.addRow(self.exclude_tag_list_scroll)
-        opt_form.addRow(self.include_rating)
-        opt_form.addRow(self.include_character)
-        opt_form.addRow(self.replace_underscore)
-        opt_form.addRow(self.recursive)
-        opt_form.addRow(self.skip_failed)
-        opt_form.addRow(self.skip_existing)
-        opt_form.addRow(self.debug_mode)
+        
+        # New Compact Layout for Checkboxes
+        settings_container = QWidget()
+        settings_layout = QGridLayout()
+        settings_layout.setContentsMargins(0, 5, 0, 5)
+        settings_container.setLayout(settings_layout)
+        
+        # Row 0
+        settings_layout.addWidget(self.include_rating, 0, 0)
+        settings_layout.addWidget(self.include_character, 0, 1)
+        settings_layout.addWidget(self.replace_underscore, 0, 2)
+        # Row 1
+        settings_layout.addWidget(self.recursive, 1, 0)
+        settings_layout.addWidget(self.skip_failed, 1, 1)
+        settings_layout.addWidget(self.skip_existing, 1, 2)
+        # Row 2
+        settings_layout.addWidget(self.debug_mode, 2, 0)
+        
+        opt_form.addRow(settings_container)
         opt_group.setLayout(opt_form)
 
         btn_row = QHBoxLayout()
@@ -1383,6 +1495,11 @@ class MainWindow(QWidget):
         QTimer.singleShot(0, self._update_exclude_tag_list_height)
 
     def _set_exclude_tags_items(self, tags):
+        # Update current list in config
+        current = self.exclude_config["current_list"]
+        self.exclude_config["lists"][current] = list(tags)
+        save_exclude_config(self.exclude_config)
+        
         self.exclude_tags_items = list(tags)
         self._render_exclude_tag_list()
         self._schedule_save()
@@ -1398,9 +1515,15 @@ class MainWindow(QWidget):
                 new_items.append(tag)
                 existing.add(tag.lower())
         
-        self.exclude_tags_items.extend(new_items)
-        self._render_exclude_tag_list()
-        self._schedule_save()
+        if new_items:
+            self.exclude_tags_items.extend(new_items)
+            # Update config
+            current = self.exclude_config["current_list"]
+            self.exclude_config["lists"][current] = self.exclude_tags_items
+            save_exclude_config(self.exclude_config)
+            
+            self._render_exclude_tag_list()
+            self._schedule_save()
 
     def _on_exclude_tags_enter(self):
         text = self.exclude_tags.text().strip()
@@ -1409,9 +1532,42 @@ class MainWindow(QWidget):
         tags = self._split_exclude_tags(text)
         if not tags:
             return
+            
+        # Check for duplicates
+        existing_lower = {t.lower() for t in self.exclude_tags_items}
+        duplicates = [t for t in tags if t.lower() in existing_lower]
+        
+        if duplicates:
+            QMessageBox.warning(self, "重复提示", f"以下标签已存在于列表中：\n{', '.join(duplicates)}")
+            # Highlight/Scroll to the first duplicate
+            self._highlight_existing_tag(duplicates[0])
+            return
+
         self._add_exclude_tags(tags)
         self.exclude_tags.setText("")
         self._render_exclude_tag_list()
+
+    def _highlight_existing_tag(self, tag_name):
+        target = tag_name.lower()
+        for i in range(self.exclude_tag_list_layout.count()):
+            item = self.exclude_tag_list_layout.itemAt(i)
+            widget = item.widget()
+            if widget:
+                try:
+                    # Structure: container -> QHBoxLayout -> [StackContainer, CloseBtn]
+                    # The first item in QHBoxLayout is the stack_container
+                    stack_container = widget.layout().itemAt(0).widget()
+                    # The first item in QStackedLayout (index 0) is tag_btn
+                    tag_btn = stack_container.layout().widget(0)
+                    
+                    if tag_btn.text().lower() == target:
+                        self.exclude_tag_list_scroll.ensureWidgetVisible(widget)
+                        # Visual feedback
+                        tag_btn.setStyleSheet("background-color: #ffeb3b; color: black; font-weight: bold; border-radius: 4px;")
+                        QTimer.singleShot(1500, lambda: tag_btn.setStyleSheet(""))
+                        return
+                except Exception:
+                    continue
 
     def _remove_exclude_tag(self, tag):
         updated = []
@@ -1421,23 +1577,121 @@ class MainWindow(QWidget):
                 removed = True
                 continue
             updated.append(value)
-        self.exclude_tags_items = updated
-        self._render_exclude_tag_list()
-        self._schedule_save()
+        
+        if removed:
+            self.exclude_tags_items = updated
+            # Update config
+            current = self.exclude_config["current_list"]
+            self.exclude_config["lists"][current] = self.exclude_tags_items
+            save_exclude_config(self.exclude_config)
+            
+            self._render_exclude_tag_list()
+            self._schedule_save()
 
-    def _apply_settings(self):
+    def _refresh_exclude_list_combo(self):
+        self.exclude_list_combo.blockSignals(True)
+        self.exclude_list_combo.clear()
+        lists = sorted(self.exclude_config["lists"].keys())
+        self.exclude_list_combo.addItems(lists)
+        current = self.exclude_config["current_list"]
+        if current in lists:
+            self.exclude_list_combo.setCurrentText(current)
+        elif lists:
+            self.exclude_list_combo.setCurrentIndex(0)
+            self.exclude_config["current_list"] = self.exclude_list_combo.currentText()
+            save_exclude_config(self.exclude_config)
+        self.exclude_list_combo.blockSignals(False)
+
+    def _on_exclude_list_changed(self):
+        current = self.exclude_list_combo.currentText()
+        if current and current in self.exclude_config["lists"]:
+            self.exclude_config["current_list"] = current
+            save_exclude_config(self.exclude_config)
+            self.exclude_tags_items = list(self.exclude_config["lists"][current])
+            self._render_exclude_tag_list()
+            self._schedule_save()
+
+    def _new_exclude_list(self):
+        name, ok = QInputDialog.getText(self, "新建排除配置", "请输入配置名称:")
+        if ok and name.strip():
+            name = name.strip()
+            if name in self.exclude_config["lists"]:
+                QMessageBox.warning(self, "错误", "配置名称已存在")
+                return
+            self.exclude_config["lists"][name] = []
+            self.exclude_config["current_list"] = name
+            save_exclude_config(self.exclude_config)
+            self._refresh_exclude_list_combo()
+            self._on_exclude_list_changed()
+
+    def _copy_exclude_list(self):
+        name, ok = QInputDialog.getText(self, "复制排除配置", "请输入新配置名称:")
+        if ok and name.strip():
+            name = name.strip()
+            if name in self.exclude_config["lists"]:
+                QMessageBox.warning(self, "错误", "配置名称已存在")
+                return
+            current = self.exclude_config["current_list"]
+            self.exclude_config["lists"][name] = list(self.exclude_config["lists"].get(current, []))
+            self.exclude_config["current_list"] = name
+            save_exclude_config(self.exclude_config)
+            self._refresh_exclude_list_combo()
+            self._on_exclude_list_changed()
+
+    def _rename_exclude_list(self):
+        current = self.exclude_config["current_list"]
+        name, ok = QInputDialog.getText(self, "重命名配置", f"将 '{current}' 重命名为:", text=current)
+        if ok and name.strip() and name.strip() != current:
+            name = name.strip()
+            if name in self.exclude_config["lists"]:
+                QMessageBox.warning(self, "错误", "配置名称已存在")
+                return
+            tags = self.exclude_config["lists"].pop(current)
+            self.exclude_config["lists"][name] = tags
+            self.exclude_config["current_list"] = name
+            save_exclude_config(self.exclude_config)
+            self._refresh_exclude_list_combo()
+            # No need to trigger change logic as content is same, just name changed
+
+    def _delete_exclude_list(self):
+        current = self.exclude_config["current_list"]
+        if len(self.exclude_config["lists"]) <= 1:
+            QMessageBox.warning(self, "错误", "至少需要保留一个配置")
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "确认删除", 
+            f"确定要删除配置 '{current}' 吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.exclude_config["lists"].pop(current)
+            # Pick a new current
+            keys = sorted(self.exclude_config["lists"].keys())
+            self.exclude_config["current_list"] = keys[0]
+            save_exclude_config(self.exclude_config)
+            self._refresh_exclude_list_combo()
+            self._on_exclude_list_changed()
+
+    def _apply_settings(self, validate=True):
         self._suppress_settings_save = True
         self.input_dir.setText(self.settings["input_dir"])
         self.output_dir.setText(self.settings["output_dir"])
         self.model_path.setText(self.settings["model_path"])
         self.tags_path.setText(self.settings["tags_path"])
         self.comfyui_dir.setText(self.settings["comfyui_dir"])
-        self.provider_combo.setCurrentText(self.settings.get("provider", "CPU"))
         self.general_th.setValue(self.settings["general_threshold"])
         self.character_th.setValue(self.settings["character_threshold"])
-        self._set_exclude_tags_items(
-            self._split_exclude_tags(self.settings["exclude_tags"])
-        )
+        
+        # Load exclude tags from config instead of settings string
+        self._refresh_exclude_list_combo()
+        current = self.exclude_config["current_list"]
+        self.exclude_tags_items = list(self.exclude_config["lists"].get(current, []))
+        self._render_exclude_tag_list()
+        
         self.exclude_tags.setText("")
         self.include_rating.setChecked(self.settings["include_rating"])
         self.include_character.setChecked(self.settings["include_character"])
@@ -1446,11 +1700,13 @@ class MainWindow(QWidget):
         self.skip_failed.setChecked(self.settings["skip_failed"])
         self.skip_existing.setChecked(self.settings["skip_existing"])
         self.debug_mode.setChecked(self.settings["debug"])
-        self._update_comfy_status()
-        self._validate_paths()
+        
+        if validate:
+            self._update_comfy_status()
+            self._validate_paths()
         self._suppress_settings_save = False
 
-    def _collect_settings(self):
+    def _collect_settings(self, save_to_file=True):
         self.settings = {
             "input_dir": self.input_dir.text().strip(),
             "output_dir": self.output_dir.text().strip(),
@@ -1467,9 +1723,9 @@ class MainWindow(QWidget):
             "skip_existing": self.skip_existing.isChecked(),
             "debug": self.debug_mode.isChecked(),
             "comfyui_dir": self.comfyui_dir.text().strip(),
-            "provider": self.provider_combo.currentText(),
         }
-        save_settings(self.settings)
+        if save_to_file:
+            save_settings(self.settings)
 
     def _pick_input(self):
         path = QFileDialog.getExistingDirectory(self, "选择输入文件夹")
@@ -1528,8 +1784,8 @@ class MainWindow(QWidget):
         super().resizeEvent(event)
         self._update_exclude_tag_list_height()
 
-    def _start(self):
-        self._collect_settings()
+    def _start(self, save_settings=True):
+        self._collect_settings(save_to_file=save_settings)
         if self.settings.get("debug") and not os.path.isfile(self.debug_log_path):
             reset_debug_log()
             self._append_debug_log("启动任务")
@@ -1631,6 +1887,10 @@ class MainWindow(QWidget):
         self._append_log(f"使用ComfyUI环境: {comfy_python}")
 
         payload = dict(self.settings)
+        if self._pending_dropped_files:
+            payload["specific_files"] = self._pending_dropped_files
+            self._pending_dropped_files = None
+            
         payload["_worker"] = True
         temp_path = os.path.join(APP_DIR, "_worker_config.json")
         with open(temp_path, "w", encoding="utf-8") as f:
@@ -1723,10 +1983,13 @@ def run_worker(config_path):
     output_dir = settings["output_dir"] or input_dir
     model_path = settings["model_path"]
     tags_path = settings["tags_path"]
-    provider = settings.get("provider", "CPU")
 
     ensure_dir(output_dir)
-    images = find_images(input_dir, settings["recursive"])
+    if settings.get("specific_files"):
+        images = settings["specific_files"]
+    else:
+        images = find_images(input_dir, settings["recursive"])
+    
     if not images:
         print(
             json.dumps(
@@ -1751,11 +2014,11 @@ def run_worker(config_path):
 
     print(
         json.dumps(
-            {"type": "log", "message": f"加载模型: {model_path} ({provider})"}, ensure_ascii=False
+            {"type": "log", "message": f"加载模型: {model_path}"}, ensure_ascii=False
         ),
         flush=True,
     )
-    session, size, layout = load_model(model_path, provider)
+    session, size, layout = load_model(model_path)
     names, general_index, character_index = read_tags_csv(tags_path)
     input_name = session.get_inputs()[0].name
     exclude_set = parse_exclude_tags(settings["exclude_tags"])

@@ -1,25 +1,37 @@
+# Python
 __pycache__/
 *.py[cod]
-*.pyd
-*.pyo
-*.so
-*.egg-info/
-*.egg
+*$py.class
 
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
-.coverage
-coverage.xml
-
+# Distribution / packaging
 dist/
 build/
+*.spec
+!BatchTagger.spec
+
+# Dependencies and Environment
 python_env/
 python_dist/
+comfyui-WD14-Tagger/
+venv/
+env/
+.env
 
+# IDE
 .vscode/
 .idea/
+*.swp
+
+# Logs and Diagnostics
+*.log
+startup_error.log
+diagnostics.json
+debug.log
+
+# User Configuration
+settings.json
+exclude_tags.json
+
+# OS specific
 .DS_Store
 Thumbs.db
-
-*.log
