@@ -951,8 +951,10 @@ class MainWindow(QWidget):
         self._save_timer.setSingleShot(True)
         self._save_timer.timeout.connect(self._auto_save_settings)
         self.setAcceptDrops(True)
+        self._init_complete = False
         self._build_ui()
         self._apply_settings(validate=False)
+        self._init_complete = True
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():

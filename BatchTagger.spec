@@ -11,9 +11,15 @@ datas = []
 binaries = []
 hiddenimports = []
 
-# Collect onnxruntime
+# Collect onnxruntime, Pillow, numpy
 binaries += collect_dynamic_libs('onnxruntime')
 tmp_ret = collect_all('onnxruntime')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+tmp_ret = collect_all('PIL')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+tmp_ret = collect_all('numpy')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 # Add libiomp5md.dll if exists in environment
