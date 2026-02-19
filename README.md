@@ -2,7 +2,8 @@
 
 用于批量图片的标签推断工具，基于 WD14 ONNX 模型与 tags.csv，输出与图片同名的 .txt 标签文件。提供图形界面，支持阈值调整、排除标签、递归目录处理与失败处理策略。
 
-<img width="905" height="911" alt="图片" src="https://github.com/user-attachments/assets/8a73f338-ef3e-47dc-aa2d-90fabc1150f2" />
+<img width="902" height="843" alt="图片" src="https://github.com/user-attachments/assets/ff20d190-0ba7-44a4-8cf1-7d9b5fa8265a" />
+
 
 <img width="2467" height="908" alt="图片" src="https://github.com/user-attachments/assets/cbfc7827-da1a-42a0-8a9d-6e0f9a5eb328" />
 
@@ -10,10 +11,10 @@
 ## 主要功能
 
 - 批量处理图片（jpg/png/webp/bmp/gif）并生成标签文件
-- 支持 GPU 加速（CUDA/DirectML）与文件夹拖拽输入
+- 文件与文件夹拖拽输入
 - 实时显示处理速度与剩余时间（ETA）
 - 通用/角色阈值可调，支持评分与角色标签输出
-- 支持下划线替换为空格、排除标签列表（支持按添加顺序/名称排序）
+- 支持下划线替换为空格、排除标签列表（支持按添加顺序/名称排序，重复检测，多套配置）
 - 支持递归子目录、跳过失败或已存在输出
 - 自动保存设置到 settings.json
 
@@ -65,7 +66,7 @@ pyinstaller BatchTagger.spec
 
 - batch_tagger.py：主程序
 - BatchTagger.spec：PyInstaller 打包配置
-- comfyui-WD14-Tagger/：ComfyUI WD14 Tagger 依赖资源
+- comfyui-WD14-Tagger/：[ComfyUI WD14 Tagger](https://huggingface.co/SmilingWolf) 依赖资源
 
 ---
 
