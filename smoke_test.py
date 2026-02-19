@@ -4,6 +4,18 @@ import time
 import subprocess
 import signal
 
+# Assert executable exists before running test
+exe_check = os.path.join("dist", "BatchTagger", "BatchTagger.exe")
+if not os.path.isfile(exe_check):
+    print(f"CRITICAL ERROR: {exe_check} not found; build step likely failed or output path is wrong.")
+    # Verify dist folder content to help debugging
+    if os.path.exists("dist"):
+        print(f"Contents of dist: {os.listdir('dist')}")
+        bt_dir = os.path.join("dist", "BatchTagger")
+        if os.path.exists(bt_dir):
+            print(f"Contents of dist/BatchTagger: {os.listdir(bt_dir)}")
+    sys.exit(1)
+
 def run_smoke_test():
     """
     Smoke test to verify the built executable launches and runs for a few seconds.

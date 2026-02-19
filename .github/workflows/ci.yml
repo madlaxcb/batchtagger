@@ -44,3 +44,9 @@ jobs:
       # We'll try it.
       run: |
         python smoke_test.py
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BatchTagger-exe
+        path: dist/BatchTagger/
