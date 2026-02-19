@@ -2,3 +2,5 @@ numpy==2.2.6
 onnxruntime==1.23.2
 pillow==12.1.0
 PyQt6==6.10.2
+pyinstaller>=6.0.0
+
