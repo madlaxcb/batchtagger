@@ -34,18 +34,22 @@ jobs:
       run: |
         python smoke_test.py
 
+    - name: Zip Build Artifacts
+      run: |
+        powershell Compress-Archive -Path dist/BatchTagger -DestinationPath BatchTagger-v${{ github.ref_name }}.zip
+
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BatchTagger-exe
-        path: dist/BatchTagger/
+        name: BatchTagger-v${{ github.ref_name }}
+        path: BatchTagger-v${{ github.ref_name }}.zip
 
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          dist/BatchTagger/BatchTagger.exe
+          BatchTagger-v${{ github.ref_name }}.zip
         draft: false
         prerelease: false
         generate_release_notes: true

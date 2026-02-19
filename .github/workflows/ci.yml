@@ -45,8 +45,13 @@ jobs:
       run: |
         python smoke_test.py
 
+    - name: Zip Build Artifacts
+      if: success()
+      run: |
+        powershell Compress-Archive -Path dist/BatchTagger -DestinationPath BatchTagger-CI-Build.zip
+
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BatchTagger-exe
-        path: dist/BatchTagger/
+        name: BatchTagger-CI-Build
+        path: BatchTagger-CI-Build.zip
